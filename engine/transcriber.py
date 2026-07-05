@@ -8,23 +8,23 @@ from .models import TranscriptSegment, TranscriptWord
 
 logger = logging.getLogger(__name__)
 
-_MODEL = None
+_MODELS = {}
 
 
 def _get_model(model_size: str = "small", device: str = "auto", compute_type: str = "int8") -> WhisperModel:
     """
-    Lazily load the whisper model once per process (workers are long-lived,
-    so this avoids reloading weights per job).
+    Lazily load the whisper model once per process per size (workers are
+    long-lived and handle both free and paid jobs, which now use different
+    model sizes — so the cache must be keyed by size, not a single global).
 
     model_size: "tiny"/"base"/"small"/"medium"/"large-v3" — tradeoff speed vs accuracy.
-    "small" is a reasonable default for clip highlight detection (we don't need
-    perfect transcription, just good enough timing + text for scoring/captions).
+    "tiny"/"base" are noticeably faster with slightly less accurate word timing;
+    fine for free-tier turnaround time. "small" is used for paid tier.
     """
-    global _MODEL
-    if _MODEL is None:
+    if model_size not in _MODELS:
         logger.info("Loading whisper model: %s", model_size)
-        _MODEL = WhisperModel(model_size, device=device, compute_type=compute_type)
-    return _MODEL
+        _MODELS[model_size] = WhisperModel(model_size, device=device, compute_type=compute_type)
+    return _MODELS[model_size]
 
 
 def transcribe(video_path: str, model_size: str = "small") -> List[TranscriptSegment]:

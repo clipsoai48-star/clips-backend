@@ -34,8 +34,12 @@ def run_pipeline(
     (LLM scores are much better calibrated for "is this actually good" than
     the raw heuristic score).
     """
-    logger.info("Job %s: transcribing %s", job.job_id, job.source_path)
-    segments = transcribe(job.source_path)
+    # Free tier uses a smaller/faster model since turnaround time matters more
+    # than transcription precision for highlight detection; paid tier gets the
+    # more accurate model.
+    whisper_model_size = "small" if job.is_paid_tier else "base"
+    logger.info("Job %s: transcribing %s (model=%s)", job.job_id, job.source_path, whisper_model_size)
+    segments = transcribe(job.source_path, model_size=whisper_model_size)
 
     logger.info("Job %s: scoring highlight candidates", job.job_id)
     candidates = score_segments(job.source_path, segments, window_seconds=job.max_clip_seconds)
@@ -70,9 +74,13 @@ def run_pipeline(
     options = _render_options_for_tier(job.is_paid_tier)
     options.speaker_colors = speaker_colors and job.is_paid_tier  # paid-only feature
     if caption_style_override:
-        # Free tier is only allowed "basic" — enforce that here, server-side,
-        # regardless of what a client requests.
-        if job.is_paid_tier or caption_style_override == "basic":
+        if caption_style_override == "none":
+            # "No captions" is available to every tier — it's simpler to render,
+            # not a premium feature.
+            options.burn_captions = False
+        elif job.is_paid_tier or caption_style_override == "basic":
+            # Free tier is only allowed "basic" — enforce that here, server-side,
+            # regardless of what a client requests.
             options.caption_style = caption_style_override
         else:
             logger.warning(
