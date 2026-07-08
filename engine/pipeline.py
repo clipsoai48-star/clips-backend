@@ -76,6 +76,10 @@ def run_pipeline(
 
     options = _render_options_for_tier(job.is_paid_tier)
     options.speaker_colors = speaker_colors and job.is_paid_tier  # paid-only feature
+
+    if job.job_type == "football" and job.sfx_choice:
+        options.add_music = False  # football clips never get background music
+        options.sfx_path = os.path.join("assets", "sfx", job.sfx_choice)
     if caption_style_override:
         if caption_style_override == "none":
             # "No captions" is available to every tier — it's simpler to render,

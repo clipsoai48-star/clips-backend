@@ -212,6 +212,7 @@ def score_football_moments(
                 score=combined,
                 reason=f"spike_energy={energy_score:.2f} lexical={lex_score:.2f}",
                 transcript_text=text,
+                sfx_offset_seconds=peak_time - window_start,
             )
         )
 

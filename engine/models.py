@@ -33,6 +33,7 @@ class HighlightCandidate:
     score: float
     reason: str
     transcript_text: str = ""
+    sfx_offset_seconds: Optional[float] = None  # seconds into the clip where the peak moment occurs
 
     @property
     def duration(self) -> float:
@@ -52,6 +53,7 @@ class RenderOptions:
     music_track_path: Optional[str] = None
     add_transitions: bool = False  # paid only
     add_zoom_punch: bool = False   # paid only ("effects")
+    sfx_path: Optional[str] = None  # e.g. assets/sfx/clip_01.mp3, used for football job_type
     output_width: int = 1080
     output_height: int = 1920
 

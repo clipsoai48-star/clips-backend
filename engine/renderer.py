@@ -115,12 +115,28 @@ def render_clip(
     ]
 
     # 4. Paid-tier background music bed, mixed under the original audio.
+    #    Mutually exclusive with the football SFX overlay below — football jobs
+    #    never set add_music, so only one of these branches fires.
     if options.add_music and options.music_track_path:
         cmd += ["-i", options.music_track_path]
         filter_complex = (
             f"[0:v]{vf_chain}[v];"
             f"[1:a]volume=0.15,aloop=loop=-1:size=2e9[music];"
             f"[0:a][music]amix=inputs=2:duration=first:dropout_transition=2[a]"
+        )
+        cmd += [
+            "-filter_complex", filter_complex,
+            "-map", "[v]", "-map", "[a]",
+        ]
+    elif options.sfx_path and candidate.sfx_offset_seconds is not None:
+        # Football SFX: a one-shot sound effect layered on top of the original
+        # audio at the moment the highlight peak occurs, no background music.
+        cmd += ["-i", options.sfx_path]
+        delay_ms = max(0, int(candidate.sfx_offset_seconds * 1000))
+        filter_complex = (
+            f"[0:v]{vf_chain}[v];"
+            f"[1:a]adelay={delay_ms}|{delay_ms}[sfx];"
+            f"[0:a][sfx]amix=inputs=2:duration=first:dropout_transition=2[a]"
         )
         cmd += [
             "-filter_complex", filter_complex,
