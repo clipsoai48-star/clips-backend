@@ -65,3 +65,5 @@ class ClipJob:
     min_clip_seconds: float = 15.0
     max_clip_seconds: float = 30.0
     is_paid_tier: bool = False
+    job_type: str = "standard"  # "standard" or "football"
+    sfx_choice: Optional[str] = None  # e.g. "clip_01.mp3", used when job_type="football"

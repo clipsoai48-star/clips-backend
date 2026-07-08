@@ -9,7 +9,7 @@ from typing import List
 
 from .models import ClipJob, RenderOptions, HighlightCandidate
 from .transcriber import transcribe
-from .scorer import score_segments, select_non_overlapping
+from .scorer import score_segments, score_football_moments, select_non_overlapping
 from .renderer import render_clip
 
 logger = logging.getLogger(__name__)
@@ -41,8 +41,11 @@ def run_pipeline(
     logger.info("Job %s: transcribing %s (model=%s)", job.job_id, job.source_path, whisper_model_size)
     segments = transcribe(job.source_path, model_size=whisper_model_size)
 
-    logger.info("Job %s: scoring highlight candidates", job.job_id)
-    candidates = score_segments(job.source_path, segments, window_seconds=job.max_clip_seconds)
+    logger.info("Job %s: scoring highlight candidates (job_type=%s)", job.job_id, job.job_type)
+    if job.job_type == "football":
+        candidates = score_football_moments(job.source_path, segments, clip_length_seconds=job.max_clip_seconds)
+    else:
+        candidates = score_segments(job.source_path, segments, window_seconds=job.max_clip_seconds)
 
     if use_llm_rerank:
         from .scorer_llm import rerank_with_llm
