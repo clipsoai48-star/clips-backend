@@ -37,7 +37,14 @@ def process_clip_job(job_record_id: str) -> None:
         user = db.query(User).filter(User.id == job_record.user_id).first()
 
         job_record.status = "processing"
+        job_record.progress = 0
         db.commit()
+
+        def _update_progress(pct: int):
+            # Re-fetch inside the callback so we always write to a live session
+            # row rather than holding a stale reference across the whole job.
+            job_record.progress = pct
+            db.commit()
 
         job_output_dir = os.path.join(OUTPUT_DIR, job_record.id)
         os.makedirs(job_output_dir, exist_ok=True)
@@ -63,6 +70,8 @@ def process_clip_job(job_record_id: str) -> None:
             # the job record, in case they cancelled between submitting and
             # the worker picking it up.
             is_paid_tier=bool(user and user.is_paid_tier),
+            job_type=job_record.job_type,
+            sfx_choice=job_record.sfx_choice,
         )
 
         output_paths = run_pipeline(
@@ -70,6 +79,7 @@ def process_clip_job(job_record_id: str) -> None:
             use_llm_rerank=job_record.use_llm_rerank,
             caption_style_override=job_record.caption_style,
             speaker_colors=job_record.speaker_colors,
+            progress_callback=_update_progress,
         )
 
         for path in output_paths:

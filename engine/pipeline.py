@@ -21,7 +21,15 @@ def run_pipeline(
     caption_style_override: str = None,
     min_score: float = None,
     speaker_colors: bool = False,
+    progress_callback=None,
 ) -> List[str]:
+    def _progress(pct: int):
+        if progress_callback:
+            try:
+                progress_callback(pct)
+            except Exception:
+                logger.exception("Job %s: progress_callback raised, continuing anyway", job.job_id)
+
     """
     Runs the end-to-end pipeline for a single source video and returns a list
     of output filepaths for the generated clips.
@@ -39,7 +47,9 @@ def run_pipeline(
     # more accurate model.
     whisper_model_size = "small" if job.is_paid_tier else "base"
     logger.info("Job %s: transcribing %s (model=%s)", job.job_id, job.source_path, whisper_model_size)
+    _progress(15)
     segments = transcribe(job.source_path, model_size=whisper_model_size)
+    _progress(40)
 
     logger.info("Job %s: scoring highlight candidates (job_type=%s)", job.job_id, job.job_type)
     if job.job_type == "football":
@@ -61,6 +71,7 @@ def run_pipeline(
         if not speaker_turns:
             logger.info("Job %s: no diarization data available, captions will use a single color", job.job_id)
 
+    _progress(60)
     selected = select_non_overlapping(candidates, count=job.target_clip_count, min_score=min_score)
     logger.info(
         "Job %s: selected %d clip-worthy moment(s) (requested up to %d, min_score=%s)",
@@ -96,12 +107,16 @@ def run_pipeline(
             )
 
     output_paths = []
+    total = len(selected)
     for i, candidate in enumerate(selected):
         out_path = os.path.join(job.output_dir, f"{job.job_id}_clip{i+1}.mp4")
         render_clip(job.source_path, candidate, segments, out_path, options, speaker_turns=speaker_turns)
         output_paths.append(out_path)
         logger.info("Job %s: rendered %s (score=%.2f, %s)", job.job_id, out_path, candidate.score, candidate.reason)
+        # Rendering is the slowest stage — spread 60-95% across each clip as it finishes.
+        _progress(60 + int(35 * (i + 1) / total))
 
+    _progress(100)
     return output_paths
 
 
