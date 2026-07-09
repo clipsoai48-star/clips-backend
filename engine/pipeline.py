@@ -45,7 +45,7 @@ def run_pipeline(
     # Free tier uses a smaller/faster model since turnaround time matters more
     # than transcription precision for highlight detection; paid tier gets the
     # more accurate model.
-    whisper_model_size = "small" if job.is_paid_tier else "base"
+    whisper_model_size = "base" if job.is_paid_tier else "tiny"
     logger.info("Job %s: transcribing %s (model=%s)", job.job_id, job.source_path, whisper_model_size)
     _progress(15)
     segments = transcribe(job.source_path, model_size=whisper_model_size)
