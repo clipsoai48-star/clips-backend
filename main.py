@@ -50,6 +50,7 @@ app.mount("/storage", StaticFiles(directory="storage"), name="storage")
 
 redis_conn = Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
 job_queue = Queue("clipso_jobs", connection=redis_conn)
+priority_job_queue = Queue("clipso_jobs_priority", connection=redis_conn)  # pro users
 
 
 @app.on_event("startup")
@@ -99,6 +100,8 @@ def create_job_from_upload(
     caption_style: str = Form("basic"),
     speaker_colors: bool = Form(False),
     use_llm_rerank: bool = Form(False),
+    job_type: str = Form("standard"),
+    sfx_choice: str = Form(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -112,6 +115,7 @@ def create_job_from_upload(
         db, current_user, source_url=None, source_filename=saved_path,
         target_clip_count=target_clip_count, clip_length_seconds=clip_length_seconds,
         caption_style=caption_style, speaker_colors=speaker_colors, use_llm_rerank=use_llm_rerank,
+        job_type=job_type, sfx_choice=sfx_choice,
     )
     return job_record
 
@@ -131,15 +135,27 @@ def create_job_from_url(
         target_clip_count=payload.target_clip_count, clip_length_seconds=payload.clip_length_seconds,
         caption_style=payload.caption_style, speaker_colors=payload.speaker_colors,
         use_llm_rerank=payload.use_llm_rerank,
+        job_type=payload.job_type, sfx_choice=payload.sfx_choice,
     )
     return job_record
 
 
 def _create_job_record(db, user, source_url, source_filename, target_clip_count,
-                        clip_length_seconds, caption_style, speaker_colors, use_llm_rerank) -> ClipJobRecord:
+                        clip_length_seconds, caption_style, speaker_colors, use_llm_rerank,
+                        job_type="standard", sfx_choice=None) -> ClipJobRecord:
     # Enforce tier limits server-side — a free-tier user requesting a paid
     # caption style or speaker colors silently gets downgraded to what
     # they're actually entitled to, rather than trusting the request body.
+    max_clips = 20 if user.is_paid_tier else 10
+    if target_clip_count < 1:
+        target_clip_count = 1
+    elif target_clip_count > max_clips:
+        logger.info(
+            "Clamping target_clip_count from %d to %d for user %s (is_paid_tier=%s)",
+            target_clip_count, max_clips, user.id, user.is_paid_tier,
+        )
+        target_clip_count = max_clips
+
     if not user.is_paid_tier:
         if caption_style != "basic":
             logger.info("Downgrading caption_style to 'basic' for free-tier user %s", user.id)
@@ -156,13 +172,17 @@ def _create_job_record(db, user, source_url, source_filename, target_clip_count,
         caption_style=caption_style,
         speaker_colors=speaker_colors,
         use_llm_rerank=use_llm_rerank,
+        job_type=job_type,
+        sfx_choice=sfx_choice,
         status="queued",
     )
     db.add(job_record)
     db.commit()
     db.refresh(job_record)
 
-    job_queue.enqueue(process_clip_job, job_record.id, job_timeout=1800)  # 30 min ceiling
+    # Pro users' jobs go to the priority queue, which the worker drains first.
+    queue = priority_job_queue if user.is_paid_tier else job_queue
+    queue.enqueue(process_clip_job, job_record.id, job_timeout=1800)  # 30 min ceiling
     return job_record
 
 
