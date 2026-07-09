@@ -48,8 +48,13 @@ class ClipJobRecord(Base):
     speaker_colors = Column(Boolean, default=False)
     use_llm_rerank = Column(Boolean, default=False)
 
+    # Football feature fields
+    job_type = Column(String, default="standard")  # "standard" or "football"
+    sfx_choice = Column(String, nullable=True)  # e.g. "clip_01.mp3"
+
     # Status tracking
     status = Column(String, default="queued")  # queued -> processing -> done | failed
+    progress = Column(Integer, default=0)  # 0-100, updated during processing
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)

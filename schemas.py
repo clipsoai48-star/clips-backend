@@ -36,6 +36,8 @@ class CreateJobRequest(BaseModel):
     caption_style: str = "basic"
     speaker_colors: bool = False
     use_llm_rerank: bool = False
+    job_type: str = "standard"  # "standard" or "football"
+    sfx_choice: Optional[str] = None  # e.g. "clip_01.mp3", only used when job_type="football"
 
 
 class ClipResponse(BaseModel):
@@ -51,9 +53,11 @@ class ClipResponse(BaseModel):
 class JobResponse(BaseModel):
     id: str
     status: str
+    progress: int
     error_message: Optional[str]
     source_url: Optional[str]
     caption_style: str
+    job_type: str
     created_at: datetime.datetime
     completed_at: Optional[datetime.datetime]
     clips: List[ClipResponse] = []
