@@ -11,6 +11,7 @@ redis>=5.0.0
 rq>=1.16.0
 pydantic[email]>=2.0.0
 python-dotenv>=1.0.0
+requests>=2.31.0
 
 # --- Engine (same as clip-worker/requirements.txt) ---
 yt-dlp>=2024.1.0

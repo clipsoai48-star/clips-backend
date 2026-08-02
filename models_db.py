@@ -21,11 +21,11 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     is_paid_tier = Column(Boolean, default=False, nullable=False)
-    # Stripe fields — populated once billing is wired up. Left nullable so the
-    # app works before Stripe is connected; is_paid_tier can be toggled
-    # manually during development.
-    stripe_customer_id = Column(String, nullable=True)
-    stripe_subscription_id = Column(String, nullable=True)
+    # Square fields — populated by the /billing/webhook/square handler once a
+    # user completes checkout. Left nullable so the app works before Square
+    # is connected; is_paid_tier can be toggled manually during development.
+    square_customer_id = Column(String, nullable=True)
+    square_subscription_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     jobs = relationship("ClipJobRecord", back_populates="user")

@@ -4,6 +4,9 @@ Clipso AI backend — API server.
 Run with: uvicorn main:app --reload
 (Requires a separate `rq worker clipso_jobs` process running too — see README.)
 """
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
 import shutil
 import logging
@@ -23,6 +26,7 @@ from schemas import (
 )
 from auth import hash_password, verify_password, create_access_token, get_current_user
 from worker import process_clip_job
+from billing import router as billing_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -33,8 +37,6 @@ os.makedirs("./storage/outputs", exist_ok=True)
 
 app = FastAPI(title="Clipso AI API")
 
-# Loosened for local dev so the frontend (running on a different port) can
-# call this API. Tighten this to your real frontend domain before deploying.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -43,22 +45,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serves rendered clip files directly (e.g. /storage/outputs/<job>/<clip>.mp4)
-# so the frontend's <video> tags can load them. Local-disk only — swap for
-# S3/R2 signed URLs before real users (see README).
 app.mount("/storage", StaticFiles(directory="storage"), name="storage")
+
+app.include_router(billing_router)
 
 redis_conn = Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
 job_queue = Queue("clipso_jobs", connection=redis_conn)
-priority_job_queue = Queue("clipso_jobs_priority", connection=redis_conn)  # pro users
+priority_job_queue = Queue("clipso_jobs_priority", connection=redis_conn)
 
 
 @app.on_event("startup")
 def on_startup():
     init_db()
 
-
-# ---------- Auth ----------
 
 @app.post("/auth/signup", response_model=TokenResponse)
 def signup(payload: SignupRequest, db: Session = Depends(get_db)):
@@ -90,8 +89,6 @@ def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
-# ---------- Jobs ----------
-
 @app.post("/jobs/upload", response_model=JobResponse)
 def create_job_from_upload(
     file: UploadFile = File(...),
@@ -105,8 +102,7 @@ def create_job_from_upload(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Create a job from a directly uploaded video file (drag-and-drop upload)."""
-    safe_filename = os.path.basename(file.filename)  # strip any directory components
+    safe_filename = os.path.basename(file.filename)
     saved_path = os.path.join(UPLOAD_DIR, f"{current_user.id}_{safe_filename}")
     with open(saved_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
@@ -126,7 +122,6 @@ def create_job_from_url(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Create a job from a YouTube/Twitch URL."""
     if not payload.source_url:
         raise HTTPException(status_code=400, detail="source_url is required for this endpoint")
 
@@ -143,9 +138,6 @@ def create_job_from_url(
 def _create_job_record(db, user, source_url, source_filename, target_clip_count,
                         clip_length_seconds, caption_style, speaker_colors, use_llm_rerank,
                         job_type="standard", sfx_choice=None) -> ClipJobRecord:
-    # Enforce tier limits server-side — a free-tier user requesting a paid
-    # caption style or speaker colors silently gets downgraded to what
-    # they're actually entitled to, rather than trusting the request body.
     max_clips = 20 if user.is_paid_tier else 10
     if target_clip_count < 1:
         target_clip_count = 1
@@ -180,9 +172,8 @@ def _create_job_record(db, user, source_url, source_filename, target_clip_count,
     db.commit()
     db.refresh(job_record)
 
-    # Pro users' jobs go to the priority queue, which the worker drains first.
     queue = priority_job_queue if user.is_paid_tier else job_queue
-    queue.enqueue(process_clip_job, job_record.id, job_timeout=1800)  # 30 min ceiling
+    queue.enqueue(process_clip_job, job_record.id, job_timeout=1800)
     return job_record
 
 
