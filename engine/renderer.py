@@ -2,8 +2,9 @@
 Render a HighlightCandidate into a final output clip using ffmpeg.
 
 Free tier: cut + vertical crop + burned-in captions.
-Paid tier: adds transitions (intro/outro), background music bed, and a zoom-punch
-effect keyed to caption emphasis words.
+Paid tier: adds transitions (intro/outro), background music bed, zoom-punch
+effect keyed to caption emphasis words, and optional face tracking that pans
+the crop to follow whoever appears to be speaking.
 """
 import os
 import subprocess
@@ -42,9 +43,6 @@ CAPTION_STYLES = {
 }
 
 
-
-
-
 def render_clip(
     source_path: str,
     candidate: HighlightCandidate,
@@ -65,15 +63,39 @@ def render_clip(
 
     video_filters = []
 
-    # 1. Crop to vertical (center crop; a production system would run a
-    #    face/motion tracker to choose the crop region per-frame — start simple).
+    # 1. Crop to vertical. If face_tracking is on, the crop pans to follow
+    #    whoever appears to be speaking (via lightweight OpenCV face
+    #    detection + mouth-motion heuristic); otherwise falls back to a
+    #    static center crop.
     if options.vertical_crop:
         # Commas inside min(...) must be escaped with a backslash — ffmpeg's
         # filtergraph parser otherwise reads an unescaped comma as the
         # separator between filters, corrupting the whole chain.
+        crop_w_expr = f"min(iw\\,ih*{options.output_width}/{options.output_height})"
+        crop_h_expr = f"min(ih\\,iw*{options.output_height}/{options.output_width})"
+
+        x_expr = "(iw-ow)/2"  # default: static center crop
+        if getattr(options, "face_tracking", False):
+            try:
+                from .face_tracker import track_active_speaker_crop, build_ffmpeg_x_expression
+                import cv2
+                cap = cv2.VideoCapture(source_path)
+                frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                cap.release()
+                crop_width_px = min(frame_width, int(frame_height * options.output_width / options.output_height))
+
+                waypoints = track_active_speaker_crop(source_path, candidate.start, candidate.end)
+                if waypoints:
+                    x_expr = build_ffmpeg_x_expression(waypoints, frame_width, crop_width_px)
+                    logger.info("Face tracking: %d waypoints for this clip", len(waypoints))
+                else:
+                    logger.info("Face tracking: no faces found, using static center crop")
+            except Exception:
+                logger.exception("Face tracking failed, falling back to static center crop")
+
         video_filters.append(
-            f"crop=w='min(iw\\,ih*{options.output_width}/{options.output_height})'"
-            f":h='min(ih\\,iw*{options.output_height}/{options.output_width})'"
+            f"crop=w='{crop_w_expr}':h='{crop_h_expr}':x='{x_expr}':y='(ih-oh)/2'"
         )
         video_filters.append(f"scale={options.output_width}:{options.output_height}")
 

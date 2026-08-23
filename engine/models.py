@@ -49,6 +49,7 @@ class RenderOptions:
     words_per_caption: int = 3    # short flashy word bursts instead of full sentences
     caption_position: str = "middle"  # "middle" (flashy, TikTok-style) or "bottom" (traditional)
     speaker_colors: bool = False  # paid only — different color per speaker (needs diarization)
+    face_tracking: bool = False   # paid only — pans crop to follow whoever's on-screen and talking
     add_music: bool = False       # paid only
     music_track_path: Optional[str] = None
     add_transitions: bool = False  # paid only

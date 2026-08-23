@@ -21,6 +21,7 @@ def run_pipeline(
     caption_style_override: str = None,
     min_score: float = None,
     speaker_colors: bool = False,
+    face_tracking: bool = False,
     progress_callback=None,
 ) -> List[str]:
     def _progress(pct: int):
@@ -87,6 +88,7 @@ def run_pipeline(
 
     options = _render_options_for_tier(job.is_paid_tier)
     options.speaker_colors = speaker_colors and job.is_paid_tier  # paid-only feature
+    options.face_tracking = face_tracking and job.is_paid_tier  # paid-only feature
 
     if job.job_type == "football" and job.sfx_choice:
         options.add_music = False  # football clips never get background music
