@@ -94,7 +94,7 @@ def create_job_from_upload(
     file: UploadFile = File(...),
     target_clip_count: int = Form(5),
     clip_length_seconds: float = Form(30.0),
-caption_style: str = Form("basic"),
+    caption_style: str = Form("basic"),
     speaker_colors: bool = Form(False),
     face_tracking: bool = Form(False),
     use_llm_rerank: bool = Form(False),
@@ -108,7 +108,7 @@ caption_style: str = Form("basic"),
     with open(saved_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-  job_record = _create_job_record(
+    job_record = _create_job_record(
         db, current_user, source_url=None, source_filename=saved_path,
         target_clip_count=target_clip_count, clip_length_seconds=clip_length_seconds,
         caption_style=caption_style, speaker_colors=speaker_colors, face_tracking=face_tracking,
@@ -126,7 +126,7 @@ def create_job_from_url(
     if not payload.source_url:
         raise HTTPException(status_code=400, detail="source_url is required for this endpoint")
 
- job_record = _create_job_record(
+    job_record = _create_job_record(
         db, current_user, source_url=payload.source_url, source_filename=None,
         target_clip_count=payload.target_clip_count, clip_length_seconds=payload.clip_length_seconds,
         caption_style=payload.caption_style, speaker_colors=payload.speaker_colors,
@@ -149,7 +149,7 @@ def _create_job_record(db, user, source_url, source_filename, target_clip_count,
         )
         target_clip_count = max_clips
 
-if not user.is_paid_tier:
+    if not user.is_paid_tier:
         if caption_style != "basic":
             logger.info("Downgrading caption_style to 'basic' for free-tier user %s", user.id)
             caption_style = "basic"
@@ -158,7 +158,7 @@ if not user.is_paid_tier:
         if face_tracking:
             face_tracking = False
 
-   job_record = ClipJobRecord(
+    job_record = ClipJobRecord(
         user_id=user.id,
         source_url=source_url,
         source_filename=source_filename,
@@ -201,4 +201,4 @@ def get_job(job_id: str, current_user: User = Depends(get_current_user), db: Ses
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}^
+    return {"status": "ok"}
