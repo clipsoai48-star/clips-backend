@@ -44,7 +44,7 @@ class ClipJobRecord(Base):
     # Requested options (mirrors engine.models.RenderOptions / ClipJob knobs)
     target_clip_count = Column(Integer, default=5)
     clip_length_seconds = Column(Float, default=30.0)
-caption_style = Column(String, default="basic")
+    caption_style = Column(String, default="basic")
     speaker_colors = Column(Boolean, default=False)
     face_tracking = Column(Boolean, default=False)
     use_llm_rerank = Column(Boolean, default=False)
