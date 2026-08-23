@@ -27,14 +27,13 @@ class UserResponse(BaseModel):
     class Config:
         from_attributes = True
 
-
 class CreateJobRequest(BaseModel):
     source_url: Optional[str] = None
-    # source_filename is set separately via the upload endpoint, not here
     target_clip_count: int = 5
     clip_length_seconds: float = 30.0
     caption_style: str = "basic"
     speaker_colors: bool = False
+    face_tracking: bool = False
     use_llm_rerank: bool = False
     job_type: str = "standard"  # "standard" or "football"
     sfx_choice: Optional[str] = None  # e.g. "clip_01.mp3", only used when job_type="football"

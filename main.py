@@ -94,8 +94,9 @@ def create_job_from_upload(
     file: UploadFile = File(...),
     target_clip_count: int = Form(5),
     clip_length_seconds: float = Form(30.0),
-    caption_style: str = Form("basic"),
+caption_style: str = Form("basic"),
     speaker_colors: bool = Form(False),
+    face_tracking: bool = Form(False),
     use_llm_rerank: bool = Form(False),
     job_type: str = Form("standard"),
     sfx_choice: str = Form(None),
@@ -107,11 +108,11 @@ def create_job_from_upload(
     with open(saved_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    job_record = _create_job_record(
+  job_record = _create_job_record(
         db, current_user, source_url=None, source_filename=saved_path,
         target_clip_count=target_clip_count, clip_length_seconds=clip_length_seconds,
-        caption_style=caption_style, speaker_colors=speaker_colors, use_llm_rerank=use_llm_rerank,
-        job_type=job_type, sfx_choice=sfx_choice,
+        caption_style=caption_style, speaker_colors=speaker_colors, face_tracking=face_tracking,
+        use_llm_rerank=use_llm_rerank, job_type=job_type, sfx_choice=sfx_choice,
     )
     return job_record
 
@@ -125,18 +126,18 @@ def create_job_from_url(
     if not payload.source_url:
         raise HTTPException(status_code=400, detail="source_url is required for this endpoint")
 
-    job_record = _create_job_record(
+ job_record = _create_job_record(
         db, current_user, source_url=payload.source_url, source_filename=None,
         target_clip_count=payload.target_clip_count, clip_length_seconds=payload.clip_length_seconds,
         caption_style=payload.caption_style, speaker_colors=payload.speaker_colors,
-        use_llm_rerank=payload.use_llm_rerank,
+        face_tracking=payload.face_tracking, use_llm_rerank=payload.use_llm_rerank,
         job_type=payload.job_type, sfx_choice=payload.sfx_choice,
     )
     return job_record
 
 
 def _create_job_record(db, user, source_url, source_filename, target_clip_count,
-                        clip_length_seconds, caption_style, speaker_colors, use_llm_rerank,
+                        clip_length_seconds, caption_style, speaker_colors, face_tracking, use_llm_rerank,
                         job_type="standard", sfx_choice=None) -> ClipJobRecord:
     max_clips = 20 if user.is_paid_tier else 10
     if target_clip_count < 1:
@@ -148,14 +149,16 @@ def _create_job_record(db, user, source_url, source_filename, target_clip_count,
         )
         target_clip_count = max_clips
 
-    if not user.is_paid_tier:
+if not user.is_paid_tier:
         if caption_style != "basic":
             logger.info("Downgrading caption_style to 'basic' for free-tier user %s", user.id)
             caption_style = "basic"
         if speaker_colors:
             speaker_colors = False
+        if face_tracking:
+            face_tracking = False
 
-    job_record = ClipJobRecord(
+   job_record = ClipJobRecord(
         user_id=user.id,
         source_url=source_url,
         source_filename=source_filename,
@@ -163,6 +166,7 @@ def _create_job_record(db, user, source_url, source_filename, target_clip_count,
         clip_length_seconds=clip_length_seconds,
         caption_style=caption_style,
         speaker_colors=speaker_colors,
+        face_tracking=face_tracking,
         use_llm_rerank=use_llm_rerank,
         job_type=job_type,
         sfx_choice=sfx_choice,
@@ -197,4 +201,4 @@ def get_job(job_id: str, current_user: User = Depends(get_current_user), db: Ses
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok"}^
