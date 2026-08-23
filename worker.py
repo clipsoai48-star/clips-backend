@@ -74,7 +74,7 @@ def process_clip_job(job_record_id: str) -> None:
             sfx_choice=job_record.sfx_choice,
         )
 
-output_paths = run_pipeline(
+        output_paths = run_pipeline(
             engine_job,
             use_llm_rerank=job_record.use_llm_rerank,
             caption_style_override=job_record.caption_style,
