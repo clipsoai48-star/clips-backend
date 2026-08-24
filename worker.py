@@ -6,6 +6,7 @@ Runs entirely separately from the web server process, which is why video
 processing doesn't block HTTP requests or time out.
 """
 import os
+import shutil
 import logging
 import datetime
 
@@ -28,6 +29,9 @@ def process_clip_job(job_record_id: str) -> None:
     queue boundary.
     """
     db = SessionLocal()
+    source_path = None
+    source_cleanup_dir = None  # set for downloaded videos so we can rm -rf the whole _source folder
+
     try:
         job_record = db.query(ClipJobRecord).filter(ClipJobRecord.id == job_record_id).first()
         if job_record is None:
@@ -52,7 +56,8 @@ def process_clip_job(job_record_id: str) -> None:
         # Resolve the source video — either download it fresh from a URL, or
         # point at the already-saved upload.
         if job_record.source_url:
-            source_path = download_source(job_record.source_url, out_dir=os.path.join(job_output_dir, "_source"))
+            source_cleanup_dir = os.path.join(job_output_dir, "_source")
+            source_path = download_source(job_record.source_url, out_dir=source_cleanup_dir)
         elif job_record.source_filename:
             source_path = register_local_upload(job_record.source_filename)
         else:
@@ -99,4 +104,18 @@ def process_clip_job(job_record_id: str) -> None:
             job_record.error_message = str(e)
             db.commit()
     finally:
+        # Always clean up the downloaded/uploaded source video, whether the
+        # job succeeded or failed — it's not needed once rendering is done
+        # (or has given up), and leaving these around is what filled up the
+        # disk previously.
+        try:
+            if source_cleanup_dir and os.path.isdir(source_cleanup_dir):
+                shutil.rmtree(source_cleanup_dir, ignore_errors=True)
+                logger.info("Cleaned up downloaded source for job %s", job_record_id)
+            elif source_path and os.path.isfile(source_path):
+                os.remove(source_path)
+                logger.info("Cleaned up uploaded source for job %s", job_record_id)
+        except Exception:
+            logger.exception("Job %s: cleanup of source file failed, continuing anyway", job_record_id)
+
         db.close()
