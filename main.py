@@ -9,6 +9,8 @@ load_dotenv()
 
 import os
 import shutil
+import time
+import threading
 import logging
 
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, status
@@ -32,8 +34,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 UPLOAD_DIR = os.environ.get("CLIPSO_UPLOAD_DIR", "./storage/uploads")
+OUTPUT_DIR = os.environ.get("CLIPSO_OUTPUT_DIR", "./storage/outputs")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs("./storage/outputs", exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# How long a rendered clip stays on disk before being auto-deleted. Kept very
+# short for now to minimize storage costs pre-revenue — raise this once
+# there's a paying user base to justify keeping clips around longer.
+CLIP_RETENTION_SECONDS = 10 * 60  # 10 minutes
 
 app = FastAPI(title="Clipso AI API")
 
@@ -54,9 +62,27 @@ job_queue = Queue("clipso_jobs", connection=redis_conn)
 priority_job_queue = Queue("clipso_jobs_priority", connection=redis_conn)
 
 
+def _cleanup_expired_clips_loop():
+    """Background sweep: deletes any job's output folder once it's older than
+    CLIP_RETENTION_SECONDS, so rendered clips don't pile up on disk forever."""
+    while True:
+        try:
+            cutoff = time.time() - CLIP_RETENTION_SECONDS
+            if os.path.isdir(OUTPUT_DIR):
+                for job_dir_name in os.listdir(OUTPUT_DIR):
+                    full_path = os.path.join(OUTPUT_DIR, job_dir_name)
+                    if os.path.isdir(full_path) and os.path.getmtime(full_path) < cutoff:
+                        shutil.rmtree(full_path, ignore_errors=True)
+                        logger.info("Auto-deleted expired clip output: %s", job_dir_name)
+        except Exception:
+            logger.exception("Clip cleanup sweep failed, continuing anyway")
+        time.sleep(60)
+
+
 @app.on_event("startup")
 def on_startup():
     init_db()
+    threading.Thread(target=_cleanup_expired_clips_loop, daemon=True).start()
 
 
 @app.post("/auth/signup", response_model=TokenResponse)
