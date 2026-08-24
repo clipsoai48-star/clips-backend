@@ -21,7 +21,7 @@ def download_source(url: str, out_dir: str) -> str:
         "outtmpl": out_template,
         # cap resolution — we don't need 4k source for short-form clip generation,
         # this keeps download + ffmpeg processing time/cost down
-        "format": "bestvideo[height<=1080]+bestaudio/best[height<=1080]",
+       "format": "bestvideo[height<=720]+bestaudio/best[height<=720]",
         "merge_output_format": "mp4",
         "quiet": True,
         "no_warnings": True,
